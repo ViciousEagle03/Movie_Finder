@@ -1,42 +1,52 @@
 import json
-import requests
+import aiohttp
 import asyncio
-  
-GENRES = "Comedy"
+
+GENRES = "Horror"
 RSCORE = 60
-STOP = 3
+STOP = 1000
 URL = "https://rotten-tomatoes-api.ue.r.appspot.com/search/"
 
-def main():
-    req_movie_list = []
-    
+async def main():
+    url_search_list=[]
     for movie in movies_name(STOP):
-        
         url_search = URL + movie
-        m_detail = movie_detail(url_search)
-        if m_detail and check_genres_rscore(m_detail):
-            req_movie_list.append((movie , m_detail[0]["weighted_score"]))
-    print(req_movie_list)
+        url_search_list.append(url_search)
+        
+    await asyncio.gather(*[movie_detail(url) for url in url_search_list])
 
 async def movie_detail(url):
-    response = requests.get(url=url)
-    if not response.text == "Internal Server Error":
-        m_detail = response.json()["movies"]
-        return (m_detail)
-    return None
+    connector = aiohttp.TCPConnector(force_close=True,limit=20)
+    try:
+        async with aiohttp.ClientSession(connector=connector) as session:
         
-
+            async with session.get(url=url) as response:
+                response_text = await response.text()
+                
+                if not response_text == "Internal Server Error" and response.headers['Content-Type'] == 'application/json' and response.status == 200:
+                    m_detail = await response.json()
+                    
+                    if m_detail and check_genres_rscore(m_detail):
+                        print((m_detail["movies"][0]["name"], m_detail["movies"][0]["weighted_score"]))
+    except:
+        print("dikkat")
+                      
 def check_genres_rscore(m_detail):
-    return GENRES in m_detail[0]["genres"] and RSCORE <= m_detail[0]["weighted_score"] 
-   
-
-
+    if m_detail and "movies" in m_detail and m_detail["movies"]:
+        return (
+            GENRES in m_detail["movies"][0]["genres"]
+            and RSCORE <= m_detail["movies"][0]["weighted_score"]
+        )
+    else:
+        return False
+    #return GENRES in m_detail["movies"][0]["genres"] and RSCORE <= m_detail["movies"][0]["weighted_score"] 
 def movies_name(stop):
-    with open ("/home/piyush/expo/csvmovie.json" , mode="r") as file:
+    with open ("/home/piyush/expo/moviename.json" , mode="r") as file:
         file_content = json.load(file)
         movie_list = file_content["movies"]
         return movie_list[:stop]
     
         
 
-main() 
+asyncio.run(main())
+
